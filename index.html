@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Questra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-2.20.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { 
+      font-family: 'Inter', sans-serif; 
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* Theme-specific body styles */
+    html.light body { background-color: #f1f5f9; color: #0f172a; }
+    html.nova body { background-color: #eb79ce; color: #312e81; }
+    html.dark body { background-image: linear-gradient(to bottom, #071024, #041122); color: #e5e7eb; }
+
+    /* Glass effect styles */
+    .glass-bg {
+      backdrop-filter: blur(8px);
+    }
+    html.dark .glass-bg {
+      background: rgba(255,255,255,0.03); 
+      border-color: rgba(255,255,255,0.1);
+    }
+    html.light .glass-bg {
+      background: rgba(255,255,255,0.7); 
+      border-color: rgba(0,0,0,0.1);
+    }
+    html.nova .glass-bg {
+      background: rgba(255,255,255,0.5); 
+      border-color: rgba(49, 46, 129, 0.2);
+    }
+
+    /* Logo text theme variations */
+    html.dark .logo-text { color: #fff; }
+    html.light .logo-text { color: #0f172a; }
+    html.nova .logo-text { color: #312e81; }
+
+    /* Animations */
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in { animation: fade-in 0.6s ease-out both; }
+
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "fuse.js": "https://aistudiocdn.com/fuse.js@^7.1.0"
+  }
+}
+</script>
+</head>
+<body class="transition-colors duration-300">
+  <div id="root"></div>
+  <script type="module">
+    import React from 'react';
+    import ReactDOM from 'react-dom/client';
+    import Fuse from 'fuse.js';
+    import { GoogleGenAI } from "@google/genai";
+
+    // --- FROM types.ts ---
+    
+    // --- FROM constants.ts ---
+    const MOCK_DATA = [
+      { id: 'P001', title: 'Microgravity increases root length in Arabidopsis', authors: 'A. N. Researcher; B. Scientist', year: '2012', tags: ['plant'], mission: 'ISS', abstract: 'Study of Arabidopsis under microgravity...', results_text: 'We observed increased root elongation by 18% in microgravity.', conclusion_text: 'Microgravity led to increased root length.', evidence_snippets: ['Results: increased root elongation by 18% (Fig2).'] },
+      { id: 'P002', title: 'No significant effect of microgravity on Arabidopsis roots', authors: 'C. D. Botanist', year: '2014', tags: ['plant'], mission: 'ISS', abstract: 'Alternative study with different cultivar...', results_text: 'No significant changes observed in root length.', conclusion_text: 'Microgravity had no measurable effect on root length in our conditions.', evidence_snippets: ['Results: no significant change (p=0.12)'] },
+      { id: 'P003', title: 'Rodent bone density decreases after long-duration flight', authors: 'E. Bio; F. Phys', year: '2010', tags: ['human'], mission: 'ISS', abstract: 'Mouse bone loss study.', results_text: 'Femoral BMD decreased by 14% after 30 days.', conclusion_text: 'Microgravity causes bone loss in rodents.', evidence_snippets: ['Results: Femoral BMD -14%'] },
+      { id: 'P004', title: 'Countermeasures mitigate bone loss in rodents', authors: 'G. K. Research', year: '2016', tags: ['human'], mission: 'ISS', abstract: 'Exercise protocols study.', results_text: 'Resistance exercise reduced BMD loss to 5%.', conclusion_text: 'Exercise is partially protective against microgravity bone loss.', evidence_snippets: ['Results: resistance exercise reduced loss'] },
+      { id: 'P005', title: 'Microbial growth increases under simulated space conditions', authors: 'H. Microbe', year: '2018', tags: ['microbe'], mission: 'Ground-Analog', abstract: 'Bacterial culturing under radiation and low-shear.', results_text: 'Increased colony forming units under simulated conditions.', conclusion_text: 'Certain microbes proliferate faster under space analog conditions.', evidence_snippets: ['Results: CFU increased by 40%'] },
+      { id: 'P006', title: 'Plant nutrient uptake decreases in space-grown lettuce', authors: 'I. Agronomy', year: '2020', tags: ['plant'], mission: 'ISS', abstract: 'Lettuce growth experiment.', results_text: 'Nutrient uptake (N) decreased by 10%.', conclusion_text: 'Space conditions impair nutrient uptake in lettuce.', evidence_snippets: ['Results: N uptake -10%'] },
+      { id: 'P007', title: 'No bone loss after short-duration flight', authors: 'J. Short', year: '2009', tags: ['human'], mission: 'Shuttle', abstract: 'Short flight study.', results_text: 'No statistically significant change in bone metrics.', conclusion_text: 'Short duration flights did not produce measurable bone loss.', evidence_snippets: ['Results: no significant change (short flight)'] },
+      { id: 'P008', title: 'Enhanced photosynthesis gene expression in Arabidopsis', authors: 'L. Gene', year: '2021', tags: ['plant'], mission: 'Ground-Analog', abstract: 'Gene expression profiling.', results_text: 'Upregulation of photosynthesis-related genes.', conclusion_text: 'Photosynthesis genes upregulated in our simulated experiment.', evidence_snippets: ['Results: upregulated genes (RNAseq)'] }
+    ];
+
+    const LOGO_URI = "questra_logo-removebg-preview.png";
+
+    // --- FROM services/geminiService.ts ---
+    let chat = null;
+
+    const initializeChat = () => {
+        if (!process.env.API_KEY) {
+            console.error("API_KEY is not set. AI Assistant will not work.");
+            return null;
+        }
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        return ai.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: 'You are a helpful AI assistant named Questra, specializing in space biology. Your goal is to help users understand and explore a database of NASA research papers. Be concise, friendly, and informative. When asked a question, provide a direct answer based on general knowledge or analyze the provided context if available.',
+            },
+        });
+    };
+
+    const getAiResponse = async (chatHistory) => {
+        if (!chat) {
+            chat = initializeChat();
+        }
+        
+        if (!chat) {
+          return "The AI assistant is not configured. Please ensure the API key is set up correctly.";
+        }
+        
+        const lastUserMessage = chatHistory[chatHistory.length - 1];
+        if (lastUserMessage.role !== 'user') {
+            return "An error occurred. No user message found.";
+        }
+
+        try {
+            const result = await chat.sendMessage({ message: lastUserMessage.content });
+            return result.text;
+        } catch (error) {
+            console.error("Gemini API error:", error);
+            chat = null;
+            return "There was an issue communicating with the AI. Please try again.";
+        }
+    };
+
+    const getSimulationPrediction = async (paper, params) => {
+        if (!chat) {
+            chat = initializeChat();
+        }
+        
+        if (!chat) {
+          return "The AI assistant is not configured. Please ensure the API key is set up correctly.";
+        }
+
+        const paramString = Object.entries(params).map(([key, value]) => `${key}: ${value}`).join(', ');
+
+        const prompt = `
+            Based on the findings of the research paper titled "${paper.title}", which concluded: "${paper.conclusion_text}",
+            predict a plausible outcome if the experimental conditions were modified.
+            Original key result: "${paper.results_text}".
+            New experimental parameters: ${paramString}.
+            Please provide a concise, speculative prediction based on the paper's context.
+        `;
+
+        try {
+            const result = await chat.sendMessage({ message: prompt });
+            return result.text;
+        } catch (error) {
+            console.error("Gemini API error during simulation:", error);
+            return "There was an issue generating the AI prediction. Please try again.";
+        }
+    };
+
+    // --- FROM components/WelcomeScreen.tsx ---
+    const WelcomeScreen = ({ onEnter }) => {
+      return (
+        React.createElement('div', { className: "min-h-screen flex items-center justify-center bg-gradient-to-b from-[#071024] to-[#041122] text-slate-200" },
+          React.createElement('div', { className: "text-center animate-fade-in" },
+            React.createElement('div', { className: "inline-flex items-center gap-4" },
+              React.createElement('img', { src: LOGO_URI, alt: "Questra Logo", className: "w-16 h-16" }),
+              React.createElement('h1', { className: "text-5xl text-white font-bold tracking-wide" }, "Questra")
+            ),
+            React.createElement('p', { className: "text-slate-300 mb-6 mt-4" }, "Explore NASA space-biology publications"),
+            React.createElement('div', { className: "flex items-center justify-center gap-4" },
+              React.createElement('button', { onClick: onEnter, className: "px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-semibold shadow-lg hover:scale-105 transition-transform duration-200" },
+                "Enter Questra"
+              )
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM components/ThemeSwitcher.tsx ---
+    const ThemeSwitcher = ({ theme, setTheme }) => {
+      const THEMES = ['dark', 'light', 'nova'];
+      const themeIndex = THEMES.indexOf(theme);
+
+      const handleThemeChange = (event) => {
+        const newThemeIndex = parseInt(event.target.value, 10);
+        setTheme(THEMES[newThemeIndex]);
+      };
+
+      return (
+        React.createElement('div', { className: "flex items-center gap-3" },
+          React.createElement('span', { className: "text-lg", title: "Dark Mode" }, "🌙"),
+          React.createElement('input', {
+            type: "range",
+            min: "0",
+            max: THEMES.length - 1,
+            value: themeIndex,
+            onChange: handleThemeChange,
+            className: "w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700",
+            style: { accentColor: theme === 'light' ? '#3b82f6' : theme === 'nova' ? '#4f46e5' : '#1fb6ff' }
+          }),
+          React.createElement('div', { className: "flex gap-2" },
+            React.createElement('span', { className: "text-lg", title: "Light Mode" }, "☀️"),
+            React.createElement('span', { className: "text-lg", title: "Nova Mode" }, "☄️")
+          )
+        )
+      );
+    };
+
+    // --- FROM components/Header.tsx ---
+    const Header = ({ theme, setTheme, searchQuery, setSearchQuery, role, setRole, onFileLoad }) => {
+        const fileInputRef = React.useRef(null);
+
+        const handleFileChange = (event) => {
+            const file = event.target.files?.[0];
+            if (file && window.Papa) {
+                window.Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        onFileLoad(results.data);
+                    },
+                });
+            }
+        };
+        
+        const triggerFileLoad = () => {
+            fileInputRef.current?.click();
+        };
+
+      return (
+        React.createElement('header', { className: "w-full glass-bg py-3 px-6 flex items-center justify-between sticky top-0 z-50" },
+          React.createElement('div', { className: "flex items-center gap-3" },
+            React.createElement('img', { src: LOGO_URI, alt: "Questra Logo", className: "w-9 h-9" }),
+            React.createElement('div', null,
+              React.createElement('div', { className: "text-2xl font-bold logo-text" }, "Questra"),
+              React.createElement('div', { className: "text-xs opacity-80 hidden md:block" }, "Space Biology Explorer")
+            )
+          ),
+          React.createElement('div', { className: "hidden lg:flex items-center gap-6" },
+            React.createElement(ThemeSwitcher, { theme: theme, setTheme: setTheme })
+          ),
+          React.createElement('div', { className: "flex items-center gap-3" },
+            React.createElement('input', {
+              value: searchQuery,
+              onChange: (e) => setSearchQuery(e.target.value),
+              className: "hidden md:block px-3 py-2 w-72 rounded-md bg-transparent border border-white/10 placeholder:text-current placeholder:opacity-60 outline-none focus:ring-2 focus:ring-cyan-400 transition",
+              placeholder: "Search e.g. effects of microgravity..."
+            }),
+            React.createElement('select', {
+              value: role,
+              onChange: (e) => setRole(e.target.value),
+              className: "hidden md:block px-3 py-2 rounded-md bg-transparent border border-white/10 outline-none focus:ring-2 focus:ring-cyan-400 transition"
+            },
+              React.createElement('option', { value: "scientist" }, "Scientist"),
+              React.createElement('option', { value: "manager" }, "Manager"),
+              React.createElement('option', { value: "architect" }, "Mission Architect"),
+              React.createElement('option', { value: "citizen" }, "Citizen Scientist")
+            ),
+            React.createElement('button', { onClick: triggerFileLoad, className: "hidden md:block px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 transition" }, "Load CSV"),
+            React.createElement('input', { ref: fileInputRef, type: "file", accept: ".csv", className: "hidden", onChange: handleFileChange })
+          )
+        )
+      );
+    };
+
+    // --- FROM components/FilterPanel.tsx ---
+    const FilterPanel = ({ year, setYear, topic, setTopic, level, setLevel, allPapers, role, onDownloadSummary }) => {
+      const { useMemo } = React;
+      
+      const GlassCard = ({ children, className }) => (
+        React.createElement('div', { className: `glass-bg p-4 rounded-xl ${className}`}, children)
+      );
+
+      const RoleSpecificContent = ({role, papers}) => {
+          const content = useMemo(() => {
+              const paperCount = papers.length;
+              switch (role) {
+                  case 'scientist':
+                      return `Detailed results view. Access ${paperCount} papers. Focus on raw data and evidence.`;
+                  case 'manager':
+                      const topics = [...new Set(papers.flatMap(p => p.tags))];
+                      return `High-level insights. ${paperCount} papers across ${topics.length} topics. Focus on trends and gaps.`;
+                  case 'architect':
+                      const missions = [...new Set(papers.map(p => p.mission))].filter(Boolean);
+                      return `Practical recommendations. ${paperCount} papers from missions like ${missions.slice(0, 2).join(', ')}. Focus on mission applicability.`;
+                  case 'citizen':
+                      return `Simplified explanations. Join crowdsourced analysis of ${paperCount} papers.`;
+                  default:
+                      return '';
+              }
+          }, [role, papers]);
+          
+          return (
+              React.createElement('div', null,
+                  React.createElement('h4', {className: "font-semibold mb-2"}, `Role View: ${role.charAt(0).toUpperCase() + role.slice(1)}`),
+                  React.createElement('p', {className: "text-sm opacity-80"}, content)
+              )
+          );
+      };
+
+      const topics = useMemo(() => [...new Set(allPapers.flatMap(p => p.tags))].sort(), [allPapers]);
+      const levels = ['Beginner', 'Intermediate', 'Advanced'];
+
+      return (
+        React.createElement('section', null,
+            React.createElement(GlassCard, null,
+              React.createElement('h3', { className: "text-lg font-semibold mb-4" }, "Filters"),
+              React.createElement('div', { className: "mb-4" },
+                React.createElement('label', { className: "text-sm opacity-80 flex justify-between" },
+                  React.createElement('span', null, "Year ≤"),
+                  React.createElement('span', { className: "font-semibold" }, year)
+                ),
+                React.createElement('input', {
+                  type: "range",
+                  min: "1990",
+                  max: "2025",
+                  value: year,
+                  onChange: (e) => setYear(parseInt(e.target.value, 10)),
+                  className: "w-full h-2 mt-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                })
+              ),
+              React.createElement('div', { className: "mb-4" },
+                React.createElement('label', { className: "text-sm opacity-80" }, "Topic"),
+                React.createElement('select', {
+                  value: topic,
+                  onChange: (e) => setTopic(e.target.value),
+                  className: "w-full mt-2 px-3 py-2 rounded-md bg-transparent border border-white/20 dark:border-white/10 outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                },
+                  React.createElement('option', { value: "" }, "All Topics"),
+                  topics.map(t => React.createElement('option', { key: t, value: t }, t.charAt(0).toUpperCase() + t.slice(1)))
+                )
+              ),
+              React.createElement('div', null,
+                React.createElement('label', { className: "text-sm opacity-80" }, "Scientific Level"),
+                React.createElement('select', {
+                  value: level,
+                  onChange: (e) => setLevel(e.target.value),
+                  className: "w-full mt-2 px-3 py-2 rounded-md bg-transparent border border-white/20 dark:border-white/10 outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                },
+                  React.createElement('option', { value: "" }, "All Levels"),
+                  levels.map(l => React.createElement('option', { key: l, value: l }, l))
+                )
+              ),
+              React.createElement('hr', { className: "my-4 border-white/10" }),
+              React.createElement(RoleSpecificContent, { role: role, papers: allPapers }),
+              React.createElement('hr', { className: "my-4 border-white/10" }),
+              React.createElement('div', null,
+                  React.createElement('h4', { className: "font-semibold mb-2" }, "Reporting"),
+                  React.createElement('button', {
+                      onClick: onDownloadSummary,
+                      className: "w-full text-left px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 transition flex items-center gap-2"
+                  },
+                      React.createElement('span', null, "📄"),
+                      React.createElement('span', null, "Download Summary (PDF)")
+                  )
+              )
+            )
+        )
+      );
+    };
+
+    // --- FROM components/PaperCard.tsx ---
+    const PaperCard = ({ paper, isSelected, onToggleCompare, onSelectPaper, onOpenSimulation, simulationResult }) => {
+      const assessDifficulty = (p) => {
+        const pYear = parseInt(p.year) || 0;
+        if (pYear >= 2018) return 'Advanced';
+        if (pYear >= 2010) return 'Intermediate';
+        return 'Beginner';
+      };
+      const level = assessDifficulty(paper);
+
+      return (
+        React.createElement('div', { className: "glass-bg p-3 rounded-lg border border-transparent hover:border-cyan-400/50 transition-all duration-300" },
+          React.createElement('div', { className: "flex justify-between items-start gap-2" },
+            React.createElement('div', { className: "flex-1" },
+              React.createElement('div', { className: "flex items-center gap-2" },
+                React.createElement('input', {
+                  type: "checkbox",
+                  checked: isSelected,
+                  onChange: onToggleCompare,
+                  className: "form-checkbox h-4 w-4 rounded bg-transparent border-slate-400/50 text-cyan-500 focus:ring-cyan-500 cursor-pointer"
+                }),
+                React.createElement('h4', { className: "font-semibold cursor-pointer", onClick: onSelectPaper }, paper.title),
+                React.createElement('span', { className: "text-xs px-2 py-0.5 rounded-full bg-white/10 whitespace-nowrap" }, level)
+              ),
+              React.createElement('p', { className: "text-xs opacity-70 mt-1" }, `${paper.authors} • ${paper.year} • ${paper.mission}`)
+            ),
+            React.createElement('div', { className: "text-xs opacity-60 capitalize whitespace-nowrap" }, (paper.tags || []).join(', '))
+          ),
+          React.createElement('p', { className: "text-sm mt-2 opacity-90 leading-relaxed" },
+            `${paper.results_text.substring(0, 140)}${paper.results_text.length > 140 ? '...' : ''}`
+          ),
+          simulationResult && React.createElement('div', { className: "mt-3 p-3 rounded-md bg-black/20 border border-cyan-400/30" },
+            React.createElement('p', { className: "text-xs font-semibold text-cyan-300 mb-1" }, "AI Prediction:"),
+            React.createElement('p', { className: "text-xs opacity-90" }, simulationResult)
+          ),
+          React.createElement('div', { className: "mt-3 flex gap-2" },
+            React.createElement('button', { onClick: onSelectPaper, className: "px-3 py-1 text-sm rounded-md bg-white/10 hover:bg-white/20 transition" }, "View Details"),
+            React.createElement('button', { onClick: onOpenSimulation, className: "px-3 py-1 text-sm rounded-md bg-white/10 hover:bg-white/20 transition flex items-center gap-1.5" },
+                React.createElement('span', null, "🔁"),
+                React.createElement('span', null, "New Simulation")
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM components/ResultsPanel.tsx ---
+    const ResultsPanel = ({ papers, selectedPaperIds, onToggleCompare, onSelectPaper, onOpenSimulation, simulationResults }) => {
+      return (
+        React.createElement('section', { className: "glass-bg p-4 rounded-xl" },
+          React.createElement('div', { className: "flex items-center justify-between mb-3" },
+            React.createElement('h3', { className: "text-lg font-semibold" }, "Search Results"),
+            React.createElement('div', { className: "text-sm opacity-80" }, `Showing ${papers.length} items`)
+          ),
+          React.createElement('div', { className: "space-y-3 max-h-[75vh] overflow-y-auto pr-2" },
+            papers.length > 0 ? (
+              papers.map(p => React.createElement(PaperCard, {
+                key: p.id,
+                paper: p,
+                isSelected: selectedPaperIds.has(p.id),
+                onToggleCompare: () => onToggleCompare(p.id),
+                onSelectPaper: () => onSelectPaper(p),
+                onOpenSimulation: () => onOpenSimulation(p),
+                simulationResult: simulationResults[p.id]
+              }))
+            ) : (
+              React.createElement('div', { className: "text-center py-10 opacity-60" },
+                React.createElement('p', null, "No papers match your criteria."),
+                React.createElement('p', { className: "text-sm mt-1" }, "Try adjusting your filters or search query.")
+              )
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM components/DetailsAndTimelinePanel.tsx ---
+    const DetailsAndTimelinePanel = ({ papers, activePaper, onSelectPaper, theme }) => {
+      const { useEffect, useRef } = React;
+
+      const Timeline = ({ papers, onSelectPaper, theme }) => {
+        const chartRef = useRef(null);
+        useEffect(() => {
+          if (!chartRef.current || !window.Plotly) return;
+          if (papers.length === 0) {
+            window.Plotly.purge(chartRef.current);
+            return;
+          }
+          const years = papers.map(d => parseInt(d.year) || null);
+          const titles = papers.map(d => d.title);
+          const types = papers.map(d => (d.tags && d.tags[0]) || 'other');
+          const trace = {
+            x: years, y: types, text: titles, customdata: papers, mode: 'markers',
+            marker: {
+              size: 12,
+              color: types.map(t => (t === 'plant' ? '#60a5fa' : t === 'human' ? '#34d399' : t === 'microbe' ? '#fbbf24' : '#9ca3af')),
+            },
+            hoverinfo: 'text'
+          };
+          const layout = {
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: { color: theme === 'light' ? '#0f172a' : theme === 'nova' ? '#312e81' : '#e6eef8' },
+            margin: { t: 10, b: 40, l: 60, r: 10 }, yaxis: { type: 'category', automargin: true }, xaxis: { title: 'Year' }
+          };
+          window.Plotly.newPlot(chartRef.current, [trace], layout, { displayModeBar: false, responsive: true });
+          const currentChart = chartRef.current;
+          const handleClick = (data) => {
+            const point = data.points[0];
+            if (point && point.customdata) onSelectPaper(point.customdata);
+          };
+          currentChart.on('plotly_click', handleClick);
+          return () => {
+            if (currentChart && currentChart.removeAllListeners) {
+              currentChart.removeAllListeners('plotly_click');
+            }
+          };
+        }, [papers, onSelectPaper, theme]);
+        if (papers.length === 0) {
+          return React.createElement('div', { className: "h-64 w-full flex items-center justify-center text-center opacity-60" }, React.createElement('p', null, "Select a paper to view its topic's timeline."));
+        }
+        return React.createElement('div', { ref: chartRef, className: "h-64 w-full" });
+      };
+
+      const speakText = (text) => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'en-US';
+          window.speechSynthesis.speak(utterance);
+        } else {
+          alert('Text-to-Speech is not supported by your browser.');
+        }
+      };
+
+      const handleSpeak = () => {
+        if (!activePaper) return;
+        const contentToRead = `Title: ${activePaper.title}. Authors: ${activePaper.authors}. Results: ${activePaper.results_text}. Conclusion: ${activePaper.conclusion_text}.`;
+        speakText(contentToRead);
+      };
+      
+      useEffect(() => {
+        return () => { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); };
+      }, []);
+
+      return (
+        React.createElement('section', { className: "glass-bg p-4 rounded-xl" },
+          React.createElement('h3', { className: "text-lg font-semibold mb-3" }, "Timeline"),
+          React.createElement(Timeline, { papers: papers, onSelectPaper: onSelectPaper, theme: theme }),
+          React.createElement('hr', { className: "my-4 border-white/10" }),
+          React.createElement('h3', { className: "text-lg font-semibold mb-3" }, "Selected Paper"),
+          React.createElement('div', { className: "text-sm opacity-90 h-48 overflow-y-auto pr-2" },
+            activePaper ? (
+              React.createElement('div', { className: "space-y-3" },
+                React.createElement('h4', { className: "font-semibold" }, `${activePaper.title} (${activePaper.year})`),
+                React.createElement('p', null, React.createElement('strong', null, "Authors: "), activePaper.authors),
+                React.createElement('p', null, React.createElement('strong', null, "Mission: "), activePaper.mission),
+                React.createElement('p', null, React.createElement('strong', null, "Results: "), activePaper.results_text),
+                React.createElement('p', null, React.createElement('strong', null, "Conclusion: "), activePaper.conclusion_text),
+                React.createElement('div', { className: "pt-2" },
+                  React.createElement('button', { onClick: handleSpeak, className: "px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition flex items-center gap-2" },
+                    React.createElement('span', null, "🔊"),
+                    React.createElement('span', null, "Listen to Content")
+                  )
+                )
+              )
+            ) : (
+              React.createElement('p', { className: "opacity-60 pt-4 text-center" }, "Select a paper to see details.")
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM components/CompareBar.tsx ---
+    const CompareBar = ({ count, onCompare }) => {
+      return (
+        React.createElement('div', { className: "fixed bottom-6 left-1/2 -translate-x-1/2 z-40" },
+          React.createElement('div', { className: "flex items-center gap-4 glass-bg py-3 px-5 rounded-xl shadow-2xl border border-white/10" },
+            React.createElement('span', { className: "font-medium" }, `${count} paper${count > 1 ? 's' : ''} selected`),
+            React.createElement('button', {
+              onClick: onCompare,
+              className: "px-4 py-1.5 text-sm rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-semibold hover:scale-105 transition-transform"
+            }, "Compare")
+          )
+        )
+      );
+    };
+
+    // --- FROM components/CompareModal.tsx ---
+    const CompareModal = ({ papers, onClose }) => {
+      return (
+        React.createElement('div', { className: "fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4", onClick: onClose },
+          React.createElement('div', {
+            className: "glass-bg p-6 rounded-xl w-full max-w-6xl max-h-[90vh] flex flex-col border border-white/10",
+            onClick: (e) => e.stopPropagation()
+          },
+            React.createElement('div', { className: "flex justify-between items-center mb-4 flex-shrink-0" },
+              React.createElement('h4', { className: "text-xl font-semibold" }, "Comparison Table"),
+              React.createElement('button', { onClick: onClose, className: "px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition" }, "Close")
+            ),
+            React.createElement('div', { className: "overflow-auto" },
+              React.createElement('table', { className: "w-full text-sm text-left border-collapse" },
+                React.createElement('thead', { className: "sticky top-0 glass-bg" },
+                  React.createElement('tr', null,
+                    React.createElement('th', { className: "p-3 border-b border-white/10 font-semibold" }, "Title"),
+                    React.createElement('th', { className: "p-3 border-b border-white/10 font-semibold" }, "Year"),
+                    React.createElement('th', { className: "p-3 border-b border-white/10 font-semibold" }, "Results"),
+                    React.createElement('th', { className: "p-3 border-b border-white/10 font-semibold" }, "Conclusion")
+                  )
+                ),
+                React.createElement('tbody', null,
+                  papers.map(p => (
+                    React.createElement('tr', { key: p.id, className: "border-b border-white/10 last:border-b-0" },
+                      React.createElement('td', { className: "p-3 align-top" }, p.title),
+                      React.createElement('td', { className: "p-3 align-top" }, p.year),
+                      React.createElement('td', { className: "p-3 align-top" }, p.results_text),
+                      React.createElement('td', { className: "p-3 align-top" }, p.conclusion_text)
+                    )
+                  ))
+                )
+              )
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM components/AiAssistant.tsx ---
+    const AiAssistant = ({ isOpen, setIsOpen, messages, onSendMessage, isLoading }) => {
+      const { useState, useRef, useEffect } = React;
+      const [inputValue, setInputValue] = useState('');
+      const messagesEndRef = useRef(null);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      };
+      useEffect(scrollToBottom, [messages, isLoading]);
+
+      const handleSend = () => {
+        if (inputValue.trim()) {
+          onSendMessage(inputValue);
+          setInputValue('');
+        }
+      };
+      const handleKeyPress = (e) => { if (e.key === 'Enter') handleSend(); };
+
+      return (
+        React.createElement(React.Fragment, null,
+          React.createElement('button', {
+            onClick: () => setIsOpen(!isOpen),
+            className: "fixed right-6 bottom-6 w-14 h-14 rounded-full flex items-center justify-center bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-2xl z-[100] hover:scale-110 transition-transform",
+            title: "AI Research Assistant"
+          },
+            React.createElement('svg', { xmlns: "http://www.w3.org/2000/svg", className: "h-7 w-7", viewBox: "0 0 20 20", fill: "currentColor" },
+              React.createElement('path', { d: "M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" })
+            )
+          ),
+          isOpen && React.createElement('div', { className: "fixed bottom-24 right-6 w-96 max-w-[90vw] z-[101] glass-bg border border-white/10 rounded-xl shadow-2xl flex flex-col animate-fade-in-up" },
+            React.createElement('div', { className: "flex justify-between items-center p-3 border-b border-white/10" },
+              React.createElement('h3', { className: "font-semibold" }, "AI Research Assistant"),
+              React.createElement('button', { onClick: () => setIsOpen(false), className: "text-2xl leading-none opacity-70 hover:opacity-100" }, "×")
+            ),
+            React.createElement('div', { className: "flex-1 p-4 overflow-y-auto h-80" },
+              messages.map((msg, index) => (
+                React.createElement('div', { key: index, className: `mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}` },
+                  React.createElement('div', { className: `rounded-lg px-3 py-2 max-w-xs ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white/10'}` }, msg.content)
+                )
+              )),
+              isLoading && React.createElement('div', { className: "mb-4 flex justify-start" },
+                 React.createElement('div', { className: "rounded-lg px-3 py-2 max-w-xs bg-white/10" },
+                   React.createElement('div', { className: "flex items-center space-x-1" },
+                      React.createElement('div', { className: "w-2 h-2 bg-slate-400 rounded-full animate-pulse [animation-delay:-0.3s]" }),
+                      React.createElement('div', { className: "w-2 h-2 bg-slate-400 rounded-full animate-pulse [animation-delay:-0.15s]" }),
+                      React.createElement('div', { className: "w-2 h-2 bg-slate-400 rounded-full animate-pulse" })
+                   )
+                 )
+              ),
+              React.createElement('div', { ref: messagesEndRef })
+            ),
+            React.createElement('div', { className: "p-3 border-t border-white/10 flex gap-2" },
+              React.createElement('input', {
+                type: "text", value: inputValue, onChange: (e) => setInputValue(e.target.value), onKeyPress: handleKeyPress,
+                placeholder: "Ask a question...",
+                className: "flex-1 px-3 py-2 rounded-md bg-transparent border border-white/20 dark:border-white/10 outline-none focus:ring-2 focus:ring-cyan-400 transition",
+                disabled: isLoading
+              }),
+              React.createElement('button', {
+                onClick: handleSend, disabled: isLoading,
+                className: "px-4 py-2 rounded-md bg-blue-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-500 transition"
+              }, "Send")
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM components/SimulationModal.tsx ---
+    const SimulationModal = ({ paper, onClose, onRunSimulation, isLoading }) => {
+      const { useState } = React;
+      const [params, setParams] = useState({ gravity: 0.17, radiation: 5, nutrients: 7, duration: 30 });
+      const handleParamChange = (field, value) => {
+        const numValue = parseFloat(value);
+        setParams(prev => ({ ...prev, [field]: isNaN(numValue) ? 0 : numValue }));
+      };
+      const handleSubmit = () => { onRunSimulation(params); };
+      return (
+        React.createElement('div', { className: "fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4", onClick: onClose },
+          React.createElement('div', {
+            className: "glass-bg p-6 rounded-xl w-full max-w-md max-h-[90vh] flex flex-col border border-white/10",
+            onClick: (e) => e.stopPropagation()
+          },
+            React.createElement('div', { className: "flex justify-between items-center mb-4" },
+              React.createElement('h4', { className: "text-xl font-semibold" }, "New Simulation"),
+              React.createElement('button', { onClick: onClose, className: "text-2xl leading-none opacity-70 hover:opacity-100" }, "×")
+            ),
+            React.createElement('p', { className: "text-sm opacity-80 mb-2" }, "Based on: ", React.createElement('strong', null, paper.title)),
+            React.createElement('p', { className: "text-xs opacity-60 mb-4" }, "Modify the experimental variables below to generate a new AI prediction."),
+            React.createElement('div', { className: "space-y-4" },
+              React.createElement('div', null, React.createElement('label', { className: "text-sm opacity-80 flex justify-between items-center" }, React.createElement('span', null, "Gravity (g)"), React.createElement('input', { type: "number", step: "0.01", value: params.gravity, onChange: e => handleParamChange('gravity', e.target.value), className: "w-24 px-2 py-1 rounded bg-transparent border border-white/20 text-right" }))),
+              React.createElement('div', null, React.createElement('label', { className: "text-sm opacity-80 flex justify-between items-center" }, React.createElement('span', null, "Radiation (relative units)"), React.createElement('input', { type: "number", step: "1", value: params.radiation, onChange: e => handleParamChange('radiation', e.target.value), className: "w-24 px-2 py-1 rounded bg-transparent border border-white/20 text-right" }))),
+              React.createElement('div', null, React.createElement('label', { className: "text-sm opacity-80 flex justify-between items-center" }, React.createElement('span', null, "Nutrients (relative units)"), React.createElement('input', { type: "number", step: "1", value: params.nutrients, onChange: e => handleParamChange('nutrients', e.target.value), className: "w-24 px-2 py-1 rounded bg-transparent border border-white/20 text-right" }))),
+              React.createElement('div', null, React.createElement('label', { className: "text-sm opacity-80 flex justify-between items-center" }, React.createElement('span', null, "Duration (days)"), React.createElement('input', { type: "number", step: "1", value: params.duration, onChange: e => handleParamChange('duration', e.target.value), className: "w-24 px-2 py-1 rounded bg-transparent border border-white/20 text-right" })))
+            ),
+            React.createElement('div', { className: "mt-6 text-right" },
+              React.createElement('button', { onClick: handleSubmit, disabled: isLoading, className: "px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-semibold shadow-lg hover:scale-105 transition-transform duration-200 disabled:opacity-50 disabled:cursor-not-allowed" },
+                isLoading ? 'Predicting...' : 'Run AI Prediction'
+              )
+            )
+          )
+        )
+      );
+    };
+
+    // --- FROM App.tsx ---
+    const App = () => {
+      const { useState, useEffect, useMemo, useCallback } = React;
+      const [hasEntered, setHasEntered] = useState(false);
+      const [theme, setTheme] = useState('dark');
+      const [allPapers, setAllPapers] = useState(MOCK_DATA);
+      const [year, setYear] = useState(2025);
+      const [topic, setTopic] = useState('');
+      const [level, setLevel] = useState('');
+      const [searchQuery, setSearchQuery] = useState('');
+      const [selectedPaperIds, setSelectedPaperIds] = useState(new Set());
+      const [activePaper, setActivePaper] = useState(null);
+      const [isCompareModalOpen, setCompareModalOpen] = useState(false);
+      const [isAiAssistantOpen, setAiAssistantOpen] = useState(false);
+      const [chatMessages, setChatMessages] = useState([{ role: 'ai', content: 'Hello! I am your AI Research Assistant. How can I help you explore this data?' }]);
+      const [isAiLoading, setIsAiLoading] = useState(false);
+      const [simulatingPaper, setSimulatingPaper] = useState(null);
+      const [isSimulating, setIsSimulating] = useState(false);
+      const [simulationResults, setSimulationResults] = useState({});
+      const [currentRole, setCurrentRole] = useState('scientist');
+
+      useEffect(() => {
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme);
+      }, []);
+
+      useEffect(() => {
+        const root = document.documentElement;
+        root.classList.remove('dark', 'light', 'nova');
+        root.classList.add(theme);
+        localStorage.setItem('theme', theme);
+      }, [theme]);
+
+      const assessDifficulty = (p) => {
+        const pYear = parseInt(p.year) || 0;
+        if (pYear >= 2018) return 'Advanced';
+        if (pYear >= 2010) return 'Intermediate';
+        return 'Beginner';
+      };
+
+      const fuse = useMemo(() => new Fuse(allPapers, { keys: ['title', 'abstract', 'results_text', 'conclusion_text', 'tags'], threshold: 0.35 }), [allPapers]);
+
+      const filteredPapers = useMemo(() => {
+        let papers = allPapers;
+        if (searchQuery.trim()) {
+          papers = fuse.search(searchQuery).map(r => r.item);
+        }
+        return papers.filter(p => {
+          const pYear = parseInt(p.year) || 0;
+          const topicMatch = !topic || (p.tags && p.tags.includes(topic));
+          const yearMatch = pYear <= year;
+          const levelMatch = !level || (assessDifficulty(p) === level);
+          return topicMatch && yearMatch && levelMatch;
+        });
+      }, [allPapers, year, topic, level, searchQuery, fuse]);
+
+      const timelinePapers = useMemo(() => {
+        if (!activePaper || !activePaper.tags || activePaper.tags.length === 0) return [];
+        const activeTopic = activePaper.tags[0];
+        return allPapers.filter(p => p.tags && p.tags.includes(activeTopic));
+      }, [activePaper, allPapers]);
+
+      const selectedPapersForCompare = useMemo(() => allPapers.filter(p => selectedPaperIds.has(p.id)), [selectedPaperIds, allPapers]);
+
+      const handleToggleCompare = useCallback((paperId) => {
+        setSelectedPaperIds(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(paperId)) newSet.delete(paperId); else newSet.add(paperId);
+          return newSet;
+        });
+      }, []);
+
+      const handleSendChatMessage = async (message) => {
+        if (!message || isAiLoading) return;
+        const newMessages = [...chatMessages, { role: 'user', content: message }];
+        setChatMessages(newMessages);
+        setIsAiLoading(true);
+        try {
+            const aiResponse = await getAiResponse(newMessages);
+            setChatMessages(prev => [...prev, { role: 'ai', content: aiResponse }]);
+        } catch (error) {
+            console.error("AI Assistant Error:", error);
+            setChatMessages(prev => [...prev, { role: 'ai', content: "Sorry, I encountered an error. Please try again." }]);
+        } finally {
+            setIsAiLoading(false);
+        }
+      };
+      
+      const handleFileLoad = (parsedData) => {
+          const papers = parsedData.map((r, idx) => ({
+              id: r.id || r.ID || `CSV${idx}`, title: r.title || r.Title || r.title_text || 'Untitled',
+              authors: r.authors || r.Authors || r.contributors || '',
+              year: r.year || r.publication_year || (r.date ? r.date.split('-')[0] : ''),
+              tags: (r.tags ? r.tags.split(';') : (r.tag ? [r.tag] : [])),
+              mission: r.mission || r.Mission || '', abstract: r.abstract || '',
+              results_text: r.results_text || r.Results || '', conclusion_text: r.conclusion_text || r.Conclusion || '',
+              evidence_snippets: r.evidence_snippets ? r.evidence_snippets.split('||') : [],
+          }));
+          setAllPapers(papers);
+          setSearchQuery(''); setYear(2025); setTopic(''); setLevel('');
+          setSelectedPaperIds(new Set()); setActivePaper(null);
+      };
+
+      const handleOpenSimulation = (paper) => { setSimulatingPaper(paper); };
+
+      const handleRunSimulation = async (params) => {
+        if (!simulatingPaper) return;
+        setIsSimulating(true);
+        try {
+          const prediction = await getSimulationPrediction(simulatingPaper, params);
+          setSimulationResults(prev => ({ ...prev, [simulatingPaper.id]: prediction }));
+        } catch (error) {
+          console.error("Simulation Error:", error);
+          setSimulationResults(prev => ({ ...prev, [simulatingPaper.id]: "An error occurred while generating the prediction." }));
+        } finally {
+          setIsSimulating(false);
+          setSimulatingPaper(null);
+        }
+      };
+
+      const handleDownloadSummary = () => {
+        const { jsPDF } = window.jspdf;
+        if (!jsPDF) { alert('PDF generation library is not loaded.'); return; }
+        const doc = new jsPDF();
+        doc.setFontSize(18); doc.text('Questra Activity Summary', 10, 20);
+        doc.setFontSize(12); doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 10, 30);
+        let y = 45;
+        doc.setFontSize(14); doc.text('Current Filters', 10, y); y += 7;
+        doc.setFontSize(10);
+        doc.text(`- Search Query: ${searchQuery || 'None'}`, 14, y); y += 5;
+        doc.text(`- Max Year: ${year}`, 14, y); y += 5;
+        doc.text(`- Topic: ${topic || 'All'}`, 14, y); y += 5;
+        doc.text(`- Level: ${level || 'All'}`, 14, y); y += 10;
+        const simulationEntries = Object.entries(simulationResults);
+        if (simulationEntries.length > 0) {
+          doc.setFontSize(14); doc.text('AI Simulation Predictions', 10, y); y += 7;
+          simulationEntries.forEach(([paperId, prediction]) => {
+            if (y > 270) { doc.addPage(); y = 20; }
+            const paper = allPapers.find(p => p.id === paperId);
+            doc.setFontSize(11); doc.text(`Prediction for: ${paper?.title || 'Unknown Paper'}`, 14, y); y += 6;
+            doc.setFontSize(10);
+            const splitPrediction = doc.splitTextToSize(prediction, 170);
+            doc.text(splitPrediction, 18, y);
+            y += (splitPrediction.length * 4) + 5;
+          });
+          y += 5;
+        }
+        doc.save('questra_summary.pdf');
+      };
+
+      if (!hasEntered) {
+        return React.createElement(WelcomeScreen, { onEnter: () => setHasEntered(true) });
+      }
+
+      return (
+        React.createElement('div', { className: `min-h-screen ${theme === 'light' ? 'bg-slate-100 text-slate-900' : theme === 'nova' ? 'bg-[#eb79ce] text-indigo-900' : 'bg-gradient-to-b from-[#071024] to-[#041122] text-slate-200'}`},
+          React.createElement(Header, { theme, setTheme, searchQuery, setSearchQuery, role: currentRole, setRole: setCurrentRole, onFileLoad: handleFileLoad }),
+          React.createElement('main', { className: "p-4 md:p-6 grid grid-cols-1 lg:grid-cols-[320px,1fr,360px] gap-6" },
+            React.createElement(FilterPanel, { year, setYear, topic, setTopic, level, setLevel, allPapers, role: currentRole, onDownloadSummary: handleDownloadSummary }),
+            React.createElement(ResultsPanel, { papers: filteredPapers, selectedPaperIds, onToggleCompare: handleToggleCompare, onSelectPaper: setActivePaper, onOpenSimulation: handleOpenSimulation, simulationResults }),
+            React.createElement(DetailsAndTimelinePanel, { papers: timelinePapers, activePaper, onSelectPaper: setActivePaper, theme })
+          ),
+          React.createElement('footer', { className: "p-4 text-center text-xs opacity-70" }, "Prototype — BIO Scope. NASA sources."),
+          selectedPapersForCompare.length > 0 && React.createElement(CompareBar, { count: selectedPapersForCompare.length, onCompare: () => setCompareModalOpen(true) }),
+          isCompareModalOpen && React.createElement(CompareModal, { papers: selectedPapersForCompare, onClose: () => setCompareModalOpen(false) }),
+          React.createElement(AiAssistant, { isOpen: isAiAssistantOpen, setIsOpen: setAiAssistantOpen, messages: chatMessages, onSendMessage: handleSendChatMessage, isLoading: isAiLoading }),
+          simulatingPaper && React.createElement(SimulationModal, { paper: simulatingPaper, onClose: () => setSimulatingPaper(null), onRunSimulation: handleRunSimulation, isLoading: isSimulating })
+        )
+      );
+    };
+
+    // --- FROM index.tsx ---
+    const rootElement = document.getElementById('root');
+    if (!rootElement) {
+      throw new Error("Could not find root element to mount to");
+    }
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(React.createElement(React.StrictMode, null, React.createElement(App, null)));
+  </script>
+</body>
+</html>
